@@ -83,18 +83,39 @@ attestations (RTAs).  See
     # setup-ca --name ca2 --resources 2.0.0.0/8
     # issue-ee --ca-name ca2 --resources 2.0.0.0/24
     # show-ee --ca-name ca2
-    SKI:  68CA92467B1A475121A9D5181ABB3942A26CD665
+    SKI:  3EF4E7B1135DE8A100DD0BBD4882E7F943C083EE
     IPv4: 2.0.0.0/24
     IPv6:
     ASN:
     # echo "asdf" > content
     # sign-rta --ca-name ca \
-               --subject-key 68CA92467B1A475121A9D5181ABB3942A26CD665 \
+               --subject-key 3EF4E7B1135DE8A100DD0BBD4882E7F943C083EE \
                --path content --resources 1.0.0.0/24,2.0.0.0/24 \
                --out rta
     # verify-rta --ca-name ca --ca-name ca2 --path content --in rta
     Verification failed: IPv4 resource mismatch.
+    # show-rta --in rta
+    Version:    0
+    Keys:       3EF4E7B1135DE8A100DD0BBD4882E7F943C083EE
+                AD28CA615EC789B2B5C16C9C1FC33646152D7454
+    Keys (sig): AD28CA615EC789B2B5C16C9C1FC33646152D7454
+    IPv4:       1.0.0.0/24, 2.0.0.0/24
+    IPv6:
+    ASN:
+    Algorithm:  SHA256
+    Digest:     d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1
     # resign-rta --ca-name ca2 --in rta --out rta
+    # show-rta --in rta
+    Version:    0
+    Keys:       3EF4E7B1135DE8A100DD0BBD4882E7F943C083EE
+                AD28CA615EC789B2B5C16C9C1FC33646152D7454
+    Keys (sig): 3EF4E7B1135DE8A100DD0BBD4882E7F943C083EE
+                AD28CA615EC789B2B5C16C9C1FC33646152D7454
+    IPv4:       1.0.0.0/24, 2.0.0.0/24
+    IPv6:
+    ASN:
+    Algorithm:  SHA256
+    Digest:     d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1
     # verify-rta --ca-name ca --ca-name ca2 --path content --in rta
     Verification succeeded.
 

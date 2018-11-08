@@ -3,6 +3,7 @@ package APNIC::RPKI::Validator;
 use warnings;
 use strict;
 
+use APNIC::RPKI::CMS;
 use APNIC::RPKI::OpenSSL;
 use APNIC::RPKI::Utils qw(system_ad);
 use File::Slurp qw(read_file);
@@ -178,11 +179,28 @@ sub validate_rta
     my @rta_skis = sort @{$rta->subject_keys()};
     @skis = sort @skis;
     if (@skis != @rta_skis) {
-        die "Subject key identifier mismatch.";
+        die "Subject key identifier mismatch ".
+            "(RTA and EE certificates).";
     }
     for (my $i = 0; $i < @skis; $i++) {
         if ($skis[$i] ne (uc $rta_skis[$i])) {
-            die "Subject key identifier mismatch.";
+            die "Subject key identifier mismatch ".
+                "(RTA and EE certificates).";
+        }
+    }
+
+    my $cms_parser = APNIC::RPKI::CMS->new();    
+    my $cms_data = $cms_parser->decode($rta_raw);
+    my @signature_skis = sort @{$cms_data->{'skis'}};
+
+    if (@skis != @signature_skis) {
+        die "Subject key identifier mismatch ".
+            "(EE certificates and signatures).";
+    }
+    for (my $i = 0; $i < @skis; $i++) {
+        if ($skis[$i] ne (uc $signature_skis[$i])) {
+            die "Subject key identifier mismatch ".
+                "(EE certificates and signatures).";
         }
     }
 

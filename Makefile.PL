@@ -16,7 +16,8 @@ my $output = WriteMakefile(
     },
     EXE_FILES      => [ qw(bin/setup-ca bin/issue-ee
                            bin/sign-rta bin/verify-rta
-                           bin/show-ee bin/resign-rta) ],
+                           bin/show-ee bin/resign-rta
+                           bin/show-rta) ],
     PREREQ_PM      => { 'Test::More'             => 0,
                         'HTTP::Daemon'           => 0,
                         'YAML'                   => 0,

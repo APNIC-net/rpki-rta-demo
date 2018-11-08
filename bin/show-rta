@@ -1,0 +1,86 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use APNIC::RPKI::CA;
+use APNIC::RPKI::CMS;
+use APNIC::RPKI::OpenSSL;
+use APNIC::RPKI::RTA;
+
+use Cwd;
+use File::Slurp qw(read_file);
+use File::Temp;
+use Getopt::Long;
+
+sub usage
+{
+    print <<EOF;
+Usage:
+$0 --in {path}
+
+Show an RTA's details.
+EOF
+
+    exit(10);
+}
+
+my %options;
+GetOptions(\%options, 'in=s');
+if (not $options{'in'}) {
+    print "Please enter an input path.\n";
+    usage();
+}
+
+my ($in) = @options{qw(in)};
+
+my $cwd = cwd();
+
+my $cms = read_file($in);
+my $openssl = APNIC::RPKI::OpenSSL->new()->{'path'};
+my $ft = File::Temp->new();
+my $fn = $ft->filename();
+my $res = system("$openssl cms -verify -noverify -inform DER -in $in -out $fn ".
+                 ">/dev/null 2>&1");
+if ($res != 0) {
+    die "Unable to parse CMS.";
+}
+my $rta_raw = read_file($fn);
+
+my $cms_parser = APNIC::RPKI::CMS->new();
+my $rta_parser = APNIC::RPKI::RTA->new();
+my $cms_data = $cms_parser->decode($cms);
+$rta_parser->decode($rta_raw);
+
+print "Version:    ".$rta_parser->version(),"\n";
+print "Keys:       ";
+my $flag = 0;
+for my $key (sort @{$rta_parser->subject_keys()}) {
+    $key = uc $key;
+    if (not $flag) {
+        $flag = 1;
+        print "$key\n";
+    } else {
+        print "            $key\n";
+    }
+}
+print "Keys (sig): ";
+$flag = 0;
+for my $key (sort @{$cms_data->{'skis'}}) {
+    if (not $flag) {
+        $flag = 1;
+        print "$key\n";
+    } else {
+        print "            $key\n";
+    }
+}
+my $ipv4 = $rta_parser->ipv4();
+my $ipv6 = $rta_parser->ipv6();
+my $asn  = $rta_parser->asn();
+print "IPv4:       ".($ipv4 ? $ipv4->as_string() : '')."\n";
+print "IPv6:       ".($ipv6 ? $ipv6->as_string() : '')."\n";
+print "ASN:        ".($asn  ? "$asn"             : '')."\n";
+print "Algorithm:  ".$rta_parser->algorithm()."\n";
+print "Digest:     ".$rta_parser->digest(),"\n";
+
+1;
