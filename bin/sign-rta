@@ -1,0 +1,121 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use APNIC::RPKI::CA;
+use APNIC::RPKI::RTA;
+
+use Cwd;
+use File::Slurp qw(write_file);
+use Getopt::Long;
+use List::MoreUtils qw(uniq);
+use Net::CIDR::Set;
+use Set::IntSpan;
+
+sub usage
+{
+    print <<EOF;
+Usage:
+$0 --ca-name {ca-name} --path {path}
+    --resources {IPv4/IPv6/ASN resources} --out {path}
+
+Sign an RTA object.  The path to the data to be signed is provided as
+an argument to the --path option.  Multiple CA names may be provided,
+in which case the current EE for each will be used to construct the
+RTA.
+EOF
+
+    exit(10);
+}
+
+sub get_parent_data
+{
+    my ($ca, $cwd, $certs, $crls) = @_;
+
+    my $issuer = $ca->get_issuer();
+    if ($issuer eq $ca->get_subject()) {
+        return;
+    }
+
+    my $issuer_ca_path = $cwd."/data/cas/".$issuer;
+    my $issuer_ca = APNIC::RPKI::CA->new(ca_path => $issuer_ca_path);
+
+    push @{$certs}, "-----BEGIN CERTIFICATE-----\n".
+                    $issuer_ca->get_ca_pem()."\n".
+                    "-----END CERTIFICATE-----";
+    push @{$crls}, $issuer_ca->get_crl();
+
+    get_parent_data($issuer_ca, $cwd, $certs, $crls);
+}
+
+my %options;
+GetOptions(\%options, 'ca-name=s@', 'resources=s', 'path=s', 'out=s');
+if (not $options{'ca-name'}) {
+    print "Please enter a CA name.\n";
+    usage();
+}
+if (not $options{'path'}) {
+    print "Please enter a path.\n";
+    usage();
+}
+if (not $options{'resources'}) {
+    print "Please enter resource details.\n";
+    usage();
+}
+if (not $options{'out'}) {
+    print "Please enter an output path.\n";
+    usage();
+}
+
+my ($ca_names, $path, $resources, $out) =
+    @options{qw(ca-name path resources out)};
+
+my $cwd = cwd();
+if ($out !~ /^\//) {
+    $out = $cwd.'/'.$out;
+}
+
+my @cas =
+    map { my $path = $cwd."/data/cas/$_";
+          APNIC::RPKI::CA->new(ca_path => $path) }
+        @{$ca_names}; 
+
+my @skis =
+    map { my $ee = $_->get_ee();
+          $_->{'openssl'}->get_ski($ee) }
+        @cas;
+
+my $certs = [];
+my $crls = [];
+for my $ca (@cas) {
+    push @{$certs}, "-----BEGIN CERTIFICATE-----\n".
+                    $ca->get_ca_pem()."\n".
+                    "-----END CERTIFICATE-----";
+    get_parent_data($ca, $cwd, $certs, $crls);
+}
+$certs = [ uniq @{$certs} ];
+$crls = [ uniq @{$crls} ];
+
+my @resource_parts = split /,/, $resources;
+my @ipv4_resources = grep { /\./ } @resource_parts;
+my @ipv6_resources = grep { /\:/ } @resource_parts;
+my @as_resources = grep { not (/\./ or /:/) } @resource_parts;
+
+my $rta = APNIC::RPKI::RTA->new();
+$rta->version(0);
+$rta->subject_keys(\@skis);
+$rta->ipv4(Net::CIDR::Set->new({type => 'ipv4'}, (join ',', @ipv4_resources)));
+$rta->ipv6(Net::CIDR::Set->new({type => 'ipv6'}, (join ',', @ipv6_resources)));
+$rta->asn(Set::IntSpan->new((join ',', @as_resources)));
+$rta->path($cwd.'/'.$path);
+$rta->algorithm('SHA256');
+
+my $rta_asn1 = $rta->encode();
+my $cms = $cas[0]->sign_cms_rta($rta_asn1, $certs, $crls);
+for (my $i = 1; $i < @cas; $i++) {
+    $cms = $cas[$i]->resign_cms_rta($cms);
+}
+write_file($out, $cms);
+
+1;
