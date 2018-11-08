@@ -475,7 +475,7 @@ sub sign_cms_rta
                       " $other_certs_content -nosmimecap ".
                       "-keyid -md sha256 -econtent_type ".ID_CT_RTA()." ".
                       "-signer ".EE_CERT_FILENAME()." ".
-                      "-CRLfile ".$crl_fn." ".
+                      "-CRLfile $crl_fn ".
                       "-inkey ".EE_KEY_FILENAME()." ".
                       "-in $fn_input -out $fn_output");
 
@@ -484,7 +484,7 @@ sub sign_cms_rta
 
 sub resign_cms_rta
 {
-    my ($self, $input) = @_;
+    my ($self, $input, $extra_certs, $extra_crls) = @_;
 
     $self->_chdir_ca();
 
@@ -496,12 +496,34 @@ sub resign_cms_rta
     my $ft_output= File::Temp->new();
     my $fn_output = $ft_output->filename();
 
+    my $other_certs_ft = File::Temp->new();
+    my $other_certs_content = '';
+    if ($extra_certs and @{$extra_certs}) {
+        for my $cert (@{$extra_certs}) {
+            print $other_certs_ft $cert;
+            print $other_certs_ft "\n";
+        }
+        my $other_cert_fn = $other_certs_ft->filename();
+        $other_certs_content = "-certfile $other_cert_fn";
+    }
+
+    my $crls_ft = File::Temp->new();
+    print $crls_ft read_file(CRL_FILENAME());
+    print $crls_ft "\n";
+    if ($extra_crls and @{$extra_crls}) {
+        for my $crl (@{$extra_crls}) {
+            print $crls_ft $crl;
+            print $crls_ft "\n";
+        }
+    }
+    my $crl_fn = $crls_ft->filename();
+
     my $openssl = $self->{'openssl'}->get_openssl_path();
     my $res = _system("$openssl cms -resign -inform DER -outform DER ".
-                      "-nosmimecap ".
+                      " $other_certs_content -nosmimecap ".
                       "-keyid -md sha256 -econtent_type ".ID_CT_RTA()." ".
                       "-signer ".EE_CERT_FILENAME()." ".
-                      "-CRLfile ".CRL_FILENAME()." ".
+                      "-CRLfile $crl_fn ".
                       "-inkey ".EE_KEY_FILENAME()." ".
                       "-in $fn_input -out $fn_output");
 

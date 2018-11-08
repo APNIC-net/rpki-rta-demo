@@ -73,54 +73,18 @@ sub validate_rta
             # Don't load resources from non-EE certificates.
             next;
         }
-       
-        my $ski;
-        for (my $i = 0; $i < @data; $i++) {
-            my $line = $data[$i];
-            if ($line =~ /X509v3 Subject Key Identifier:/) {
-                $i++;
-                $line = $data[$i];
-                $line =~ s/\s*//g;
-                $line =~ s/://g;
-                $ski = $line;
-                last;
-            }
-        }
+
+        my $ski = $self->{'openssl'}->get_ski($cert);
         if (not $ski) {
             die "couldn't get ski for certificate";
         }
         push @skis, $ski;
 
-        for (my $i = 0; $i < @data; $i++) {
-            my $line = $data[$i];
-            if ($line =~ /sbgp-autonomousSysNum: critical/) {
-                $i++;
-                $i++;
-                while ($line ne "") {
-                    $line = $data[$i++];
-                    $line =~ s/\s*//g;
-                    $as_set = $as_set->union($line);
-                }
-            }
-        }
-        for (my $i = 0; $i < @data; $i++) {
-            my $line = $data[$i];
-            if ($line =~ /sbgp-ipAddrBlock: critical/) {
-                $i++;
-                while ($line ne "") {
-                    $line = $data[$i++];
-                    $line =~ s/\s*//g;
-                    if ($line =~ /IPv/) {
-                        next;
-                    }
-                    if ($line =~ /\./) {
-                        $ipv4_set->add($line);
-                    } elsif ($line =~ /:/) {
-                        $ipv6_set->add($line);
-                    }
-                }
-            }
-        }
+        my ($ipv4, $ipv6, $as) =
+            @{$self->{'openssl'}->get_resources($cert)};
+        $ipv4_set->add($ipv4);
+        $ipv6_set->add($ipv6);
+        $as_set = $as_set->union($as);
     }
  
     system("$openssl cms -inform DER -in $fn -verify -noverify -crlsout /tmp/crls >/dev/null 2>&1");

@@ -5,6 +5,8 @@ use strict;
 
 use File::Slurp qw(read_file);
 use File::Temp;
+use Net::CIDR::Set;
+use Set::IntSpan;
 
 use APNIC::RPKI::Utils qw(system_ad);
 
@@ -74,6 +76,56 @@ sub get_ski
     $ski =~ s/://g;
     $ski = uc $ski;
     return $ski;
+}
+
+sub get_resources
+{
+    my ($self, $cert) = @_;
+
+    my $ft_cert = File::Temp->new();
+    print $ft_cert $cert;
+    $ft_cert->flush();
+    my $fn_cert = $ft_cert->filename();
+
+    my $openssl = $self->{'path'};
+    my @data = `$openssl x509 -in $fn_cert -text -noout`;
+    
+    my $ipv4_set = Net::CIDR::Set->new({ type => 'ipv4' });
+    my $ipv6_set = Net::CIDR::Set->new({ type => 'ipv6' });
+    my $as_set = Set::IntSpan->new();
+
+    for (my $i = 0; $i < @data; $i++) {
+        my $line = $data[$i];
+        if ($line =~ /sbgp-autonomousSysNum: critical/) {
+            $i++;
+            $i++;
+            while ($line ne "") {
+                $line = $data[$i++];
+                $line =~ s/\s*//g;
+                $as_set = $as_set->union($line);
+            }
+        }
+    }
+    for (my $i = 0; $i < @data; $i++) {
+        my $line = $data[$i];
+        if ($line =~ /sbgp-ipAddrBlock: critical/) {
+            $i++;
+            while ($line ne "") {
+                $line = $data[$i++];
+                $line =~ s/\s*//g;
+                if ($line =~ /IPv/) {
+                    next;
+                }
+                if ($line =~ /\./) {
+                    $ipv4_set->add($line);
+                } elsif ($line =~ /:/) {
+                    $ipv6_set->add($line);
+                }
+            }
+        }
+    }
+
+    return [ $ipv4_set, $ipv6_set, $as_set ];
 }
 
 1;

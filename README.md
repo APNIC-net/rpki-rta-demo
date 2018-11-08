@@ -63,7 +63,7 @@ attestations (RTAs).  See
     ... unable to get local issuer certificate
     Verification failed: Command execution failed.
 
-#### RTA with multiple signatures
+#### RTA with multiple signatures (one pass)
 
     # setup-ca --name ca --resources 1.0.0.0/8
     # issue-ee --ca-name ca --resources 1.0.0.0/24
@@ -73,6 +73,28 @@ attestations (RTAs).  See
     # sign-rta --ca-name ca --ca-name ca2 \
                --path content --resources 1.0.0.0/24,2.0.0.0/24 \
                --out rta
+    # verify-rta --ca-name ca --ca-name ca2 --path content --in rta
+    Verification succeeded.
+
+#### RTA with multiple signatures (two passes)
+
+    # setup-ca --name ca --resources 1.0.0.0/8
+    # issue-ee --ca-name ca --resources 1.0.0.0/24
+    # setup-ca --name ca2 --resources 2.0.0.0/8
+    # issue-ee --ca-name ca2 --resources 2.0.0.0/24
+    # show-ee --ca-name ca2
+    SKI:  68CA92467B1A475121A9D5181ABB3942A26CD665
+    IPv4: 2.0.0.0/24
+    IPv6:
+    ASN:
+    # echo "asdf" > content
+    # sign-rta --ca-name ca \
+               --subject-key 68CA92467B1A475121A9D5181ABB3942A26CD665 \
+               --path content --resources 1.0.0.0/24,2.0.0.0/24 \
+               --out rta
+    # verify-rta --ca-name ca --ca-name ca2 --path content --in rta
+    Verification failed: IPv4 resource mismatch.
+    # resign-rta --ca-name ca2 --in rta --out rta
     # verify-rta --ca-name ca --ca-name ca2 --path content --in rta
     Verification succeeded.
 

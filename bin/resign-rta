@@ -1,0 +1,96 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use APNIC::RPKI::CA;
+use APNIC::RPKI::RTA;
+
+use Cwd;
+use File::Slurp qw(write_file read_file);
+use Getopt::Long;
+use List::MoreUtils qw(uniq);
+use Net::CIDR::Set;
+use Set::IntSpan;
+
+sub usage
+{
+    print <<EOF;
+Usage:
+$0 --ca-name {ca-name} --in {RTA CMS} --out {RTA CMS}
+
+Resign an RTA object.  The subject key of the CA's EE certificates
+needs to have been added to the RTA when it was originally
+constructed.
+EOF
+
+    exit(10);
+}
+
+sub get_parent_data
+{
+    my ($ca, $cwd, $certs, $crls) = @_;
+
+    my $issuer = $ca->get_issuer();
+    if ($issuer eq $ca->get_subject()) {
+        return;
+    }
+
+    my $issuer_ca_path = $cwd."/data/cas/".$issuer;
+    my $issuer_ca = APNIC::RPKI::CA->new(ca_path => $issuer_ca_path);
+
+    push @{$certs}, "-----BEGIN CERTIFICATE-----\n".
+                    $issuer_ca->get_ca_pem()."\n".
+                    "-----END CERTIFICATE-----";
+    push @{$crls}, $issuer_ca->get_crl();
+
+    get_parent_data($issuer_ca, $cwd, $certs, $crls);
+}
+
+my %options;
+GetOptions(\%options, 'ca-name=s@', 'in=s', 'out=s');
+if (not $options{'ca-name'}) {
+    print "Please enter a CA name.\n";
+    usage();
+}
+if (not $options{'in'}) {
+    print "Please enter an input path.\n";
+    usage();
+}
+if (not $options{'out'}) {
+    print "Please enter an output path.\n";
+    usage();
+}
+
+my ($ca_names, $in, $out) =
+    @options{qw(ca-name in out)};
+
+my $cwd = cwd();
+if ($out !~ /^\//) {
+    $out = $cwd.'/'.$out;
+}
+
+my @cas =
+    map { my $path = $cwd."/data/cas/$_";
+          APNIC::RPKI::CA->new(ca_path => $path) }
+        @{$ca_names}; 
+
+my $certs = [];
+my $crls = [];
+for my $ca (@cas) {
+    push @{$certs}, "-----BEGIN CERTIFICATE-----\n".
+                    $ca->get_ca_pem()."\n".
+                    "-----END CERTIFICATE-----";
+    get_parent_data($ca, $cwd, $certs, $crls);
+}
+$certs = [ uniq @{$certs} ];
+$crls = [ uniq @{$crls} ];
+
+my $cms = read_file($cwd.'/'.$in);
+$cms = $cas[0]->resign_cms_rta($cms, $certs, $crls);
+for (my $i = 1; $i < @cas; $i++) {
+    $cms = $cas[$i]->resign_cms_rta($cms);
+}
+write_file($cwd.'/'.$out, $cms);
+
+1;
