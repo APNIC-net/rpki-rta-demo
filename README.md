@@ -96,26 +96,26 @@ attestations (RTAs).  See
     Verification failed: IPv4 resource mismatch.
     # show-rta --in rta
     Version:    0
+    Algorithm:  SHA256
+    Digest:     d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1
     Keys:       3EF4E7B1135DE8A100DD0BBD4882E7F943C083EE
                 AD28CA615EC789B2B5C16C9C1FC33646152D7454
-    Keys (sig): AD28CA615EC789B2B5C16C9C1FC33646152D7454
     IPv4:       1.0.0.0/24, 2.0.0.0/24
     IPv6:
     ASN:
-    Algorithm:  SHA256
-    Digest:     d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1
+    Signatures: AD28CA615EC789B2B5C16C9C1FC33646152D7454 1.0.0.0/24
     # resign-rta --ca-name ca2 --in rta --out rta
     # show-rta --in rta
     Version:    0
+    Algorithm:  SHA256
+    Digest:     d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1
     Keys:       3EF4E7B1135DE8A100DD0BBD4882E7F943C083EE
-                AD28CA615EC789B2B5C16C9C1FC33646152D7454
-    Keys (sig): 3EF4E7B1135DE8A100DD0BBD4882E7F943C083EE
                 AD28CA615EC789B2B5C16C9C1FC33646152D7454
     IPv4:       1.0.0.0/24, 2.0.0.0/24
     IPv6:
     ASN:
-    Algorithm:  SHA256
-    Digest:     d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1
+    Signatures: 3EF4E7B1135DE8A100DD0BBD4882E7F943C083EE 2.0.0.0/24
+                AD28CA615EC789B2B5C16C9C1FC33646152D7454 1.0.0.0/24
     # verify-rta --ca-name ca --ca-name ca2 --path content --in rta
     Verification succeeded.
 

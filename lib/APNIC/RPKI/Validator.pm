@@ -23,7 +23,7 @@ sub new
 
 sub validate_rta
 {
-    my ($self, $rta_raw, $ta, $content) = @_;
+    my ($self, $rta_raw, $ta, $content, $certs_only) = @_;
 
     my $openssl = $self->{'openssl'}->{'path'};
     
@@ -86,6 +86,14 @@ sub validate_rta
         $ipv4_set->add($ipv4);
         $ipv6_set->add($ipv6);
         $as_set = $as_set->union($as);
+        $self->{'certs'}->{$ski} = {
+            ipv4 => $ipv4,
+            ipv6 => $ipv6,
+            as   => $as
+        };
+    }
+    if ($certs_only) {
+        return;
     }
  
     system("$openssl cms -inform DER -in $fn -verify -noverify -crlsout /tmp/crls >/dev/null 2>&1");

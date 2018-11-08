@@ -7,6 +7,7 @@ use APNIC::RPKI::CA;
 use APNIC::RPKI::CMS;
 use APNIC::RPKI::OpenSSL;
 use APNIC::RPKI::RTA;
+use APNIC::RPKI::Validator;
 
 use Cwd;
 use File::Slurp qw(read_file);
@@ -53,20 +54,13 @@ my $cms_data = $cms_parser->decode($cms);
 $rta_parser->decode($rta_raw);
 
 print "Version:    ".$rta_parser->version(),"\n";
+print "Algorithm:  ".$rta_parser->algorithm()."\n";
+print "Digest:     ".$rta_parser->digest(),"\n";
+
 print "Keys:       ";
 my $flag = 0;
 for my $key (sort @{$rta_parser->subject_keys()}) {
     $key = uc $key;
-    if (not $flag) {
-        $flag = 1;
-        print "$key\n";
-    } else {
-        print "            $key\n";
-    }
-}
-print "Keys (sig): ";
-$flag = 0;
-for my $key (sort @{$cms_data->{'skis'}}) {
     if (not $flag) {
         $flag = 1;
         print "$key\n";
@@ -80,7 +74,25 @@ my $asn  = $rta_parser->asn();
 print "IPv4:       ".($ipv4 ? $ipv4->as_string() : '')."\n";
 print "IPv6:       ".($ipv6 ? $ipv6->as_string() : '')."\n";
 print "ASN:        ".($asn  ? "$asn"             : '')."\n";
-print "Algorithm:  ".$rta_parser->algorithm()."\n";
-print "Digest:     ".$rta_parser->digest(),"\n";
+
+my $validator = APNIC::RPKI::Validator->new();
+eval { $validator->validate_rta($cms, undef, undef, 1); };
+
+print "Signatures: ";
+$flag = 0;
+for my $key (sort @{$cms_data->{'skis'}}) {
+    if (not $flag) {
+        $flag = 1;
+    } else {
+        print "            ";
+    }
+    print "$key ";
+    my $cert_details = $validator->{'certs'}->{$key};
+    my ($ipv4, $ipv6, $as) = @{$cert_details}{qw(ipv4 ipv6 as)};
+    print join ', ', grep { $_ }
+        ($ipv4->as_string(), $ipv6->as_string(),
+         ($as->empty() ? '' : "$as"));
+    print "\n";
+}
 
 1;
