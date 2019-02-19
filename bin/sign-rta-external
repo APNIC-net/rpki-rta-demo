@@ -1,0 +1,186 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use APNIC::RPKI::CA;
+use APNIC::RPKI::RTA;
+
+use Cwd;
+use File::Slurp qw(write_file read_file);
+use Getopt::Long;
+use List::MoreUtils qw(uniq);
+use Net::CIDR::Set;
+use Set::IntSpan;
+
+sub usage
+{
+    print <<EOF;
+Usage:
+$0 --ee-cert {EE certificate path}
+    --ee-key {EE certificate key}
+    --ca-cert {CA certificate paths}
+    --crl {CRL paths}
+    --path {path}
+    --resources {IPv4/IPv6/ASN resources}
+    --subject-key {subject-key}
+    --out {path}
+
+Sign an RTA object using externally-sourced certificates and keys.
+The path to the data to be signed is provided as an argument to the
+--path option.  Multiple CA certificates, CRLs, and subject keys may
+be provided (the subject key of the argument EE certificate will be
+used implicitly, though, as will its parent CA certificates and their
+CRLs, if they can be retrieved).  If additional subject keys need to
+be added to the RTA, they should be provided as arguments to the
+--subject-key option in hexadecimal format.
+EOF
+
+    exit(10);
+}
+
+sub load_cas
+{
+    my ($ca_cert) = @_;
+    print "$ca_cert\n";
+
+    my @res = `openssl x509 -inform PEM -in $ca_cert -text -noout | grep "CA Issuers" | sed 's/.* - URI://'`;
+    my $url = $res[0];
+    if (not $url) {
+        return;
+    }
+    chomp $url;
+    print "$url\n";
+    sleep(1);
+    system("rsync $url .");
+    my $basename = $url;
+    $basename =~ s/.*\///;
+    print "base: $basename\n";
+    system("ls -lart $basename");
+    sleep(1);
+    system("openssl x509 -inform DER -in $basename -outform PEM -out $basename.pem");
+
+    return ("$basename.pem", load_cas("$basename.pem"));
+}
+
+sub load_crls
+{
+    my ($ca_cert) = @_;
+
+    my @res = `openssl x509 -inform PEM -in $ca_cert -text -noout | grep -A 5 "X509v3 CRL Distribution Points" | grep 'URI:' | sed 's/.*URI://'`;
+    my $url = $res[0];
+    if (not $url) {
+        return;
+    }
+    chomp $url;
+    system("rsync $url .");
+    my $basename = $url;
+    $basename =~ s/.*\///;
+    system("openssl crl -inform DER -in $basename -outform PEM -out $basename.pem");
+
+    return ("$basename.pem");
+}
+
+my %options;
+GetOptions(\%options,
+    'ee-cert=s', 'ee-key=s', 'ca-cert=s@', 'crl=s@',
+    'resources=s', 'path=s', 'out=s', 'subject-key=s@');
+if (not $options{'ee-cert'}) {
+    print "Please enter an EE certificate path.\n";
+    usage();
+}
+if (not $options{'ee-key'}) {
+    print "Please enter an EE key path.\n";
+    usage();
+}
+if (not $options{'crl'}) {
+    print "Please enter a CRL path.\n";
+    usage();
+}
+
+if (not $options{'path'}) {
+    print "Please enter a path.\n";
+    usage();
+}
+if (not $options{'resources'}) {
+    print "Please enter resource details.\n";
+    usage();
+}
+if (not $options{'out'}) {
+    print "Please enter an output path.\n";
+    usage();
+}
+
+my ($ee_cert, $ee_key, $ca_certs, $crls,
+    $path, $resources, $out, $arg_skis) =
+    @options{qw(ee-cert ee-key ca-cert crl
+                path resources out subject-key)};
+$ca_certs ||= [];
+
+my $cwd = cwd();
+if ($out !~ /^\//) {
+    $out = $cwd.'/'.$out;
+}
+
+my $openssl = APNIC::RPKI::OpenSSL->new();
+my $openssl_path = $openssl->get_openssl_path();
+
+my @skis;
+my $data = read_file($ee_cert);
+push @skis, $openssl->get_ski($data);
+push @skis, @{$arg_skis || []};
+@skis = uniq @skis;
+
+my @all_ca_certs =
+    (@{$ca_certs}, map { load_cas($_) } ($ee_cert, @{$ca_certs}));
+
+my $ca_ft = File::Temp->new();
+for my $cert (@all_ca_certs) {
+	print $ca_ft read_file($cert);
+	print $ca_ft "\n";
+}
+my $ca_fn = $ca_ft->filename();
+my $other_certs_content = "-certfile $ca_fn";
+
+my $crls_ft = File::Temp->new();
+for my $crl (@{$crls}) {
+    print $crls_ft read_file($crl);
+    print $crls_ft "\n";
+}
+my @other_crls = map { load_crls($_) } @all_ca_certs;
+for my $other_crl (@other_crls) {
+    print $crls_ft read_file($other_crl);
+    print $crls_ft "\n";
+}
+my $crl_fn = $crls_ft->filename();
+
+my @resource_parts = split /,/, $resources;
+my @ipv4_resources = grep { /\./ } @resource_parts;
+my @ipv6_resources = grep { /\:/ } @resource_parts;
+my @as_resources = grep { not (/\./ or /:/) } @resource_parts;
+
+my $rta = APNIC::RPKI::RTA->new();
+$rta->version(0);
+$rta->subject_keys(\@skis);
+$rta->ipv4(Net::CIDR::Set->new({type => 'ipv4'}, (join ',', @ipv4_resources)));
+$rta->ipv6(Net::CIDR::Set->new({type => 'ipv6'}, (join ',', @ipv6_resources)));
+$rta->asn(Set::IntSpan->new((join ',', @as_resources)));
+$rta->path($cwd.'/'.$path);
+$rta->algorithm('SHA256');
+
+my $rta_asn1 = $rta->encode();
+my $input = File::Temp->new();
+print $input $rta_asn1;
+$input->flush();
+my $fn_input = $input->filename();
+
+my $res = system("$openssl_path cms -sign -nodetach -binary -outform DER ".
+		    " $other_certs_content -nosmimecap ".
+		    "-keyid -md sha256 -econtent_type ".
+                    APNIC::RPKI::CA::ID_CT_RTA()." ".
+		    "-signer $ee_cert ".
+		    "-CRLfile $crl_fn ".
+		    "-inkey $ee_key ".
+		    "-in $fn_input -out $out");
+
+1;
