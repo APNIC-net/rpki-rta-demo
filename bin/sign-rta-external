@@ -33,7 +33,8 @@ be provided (the subject key of the argument EE certificate will be
 used implicitly, though, as will its parent CA certificates and their
 CRLs, if they can be retrieved).  If additional subject keys need to
 be added to the RTA, they should be provided as arguments to the
---subject-key option in hexadecimal format.
+--subject-key option in hexadecimal format.  All certificate, key, and
+CRL arguments must be in PEM format.
 EOF
 
     exit(10);
@@ -42,7 +43,6 @@ EOF
 sub load_cas
 {
     my ($ca_cert) = @_;
-    print "$ca_cert\n";
 
     my @res = `openssl x509 -inform PEM -in $ca_cert -text -noout | grep "CA Issuers" | sed 's/.* - URI://'`;
     my $url = $res[0];
@@ -50,14 +50,9 @@ sub load_cas
         return;
     }
     chomp $url;
-    print "$url\n";
-    sleep(1);
     system("rsync $url .");
     my $basename = $url;
     $basename =~ s/.*\///;
-    print "base: $basename\n";
-    system("ls -lart $basename");
-    sleep(1);
     system("openssl x509 -inform DER -in $basename -outform PEM -out $basename.pem");
 
     return ("$basename.pem", load_cas("$basename.pem"));
@@ -136,8 +131,8 @@ my @all_ca_certs =
 
 my $ca_ft = File::Temp->new();
 for my $cert (@all_ca_certs) {
-	print $ca_ft read_file($cert);
-	print $ca_ft "\n";
+    print $ca_ft read_file($cert);
+    print $ca_ft "\n";
 }
 my $ca_fn = $ca_ft->filename();
 my $other_certs_content = "-certfile $ca_fn";
@@ -175,12 +170,12 @@ $input->flush();
 my $fn_input = $input->filename();
 
 my $res = system("$openssl_path cms -sign -nodetach -binary -outform DER ".
-		    " $other_certs_content -nosmimecap ".
-		    "-keyid -md sha256 -econtent_type ".
+                    " $other_certs_content -nosmimecap ".
+                    "-keyid -md sha256 -econtent_type ".
                     APNIC::RPKI::CA::ID_CT_RTA()." ".
-		    "-signer $ee_cert ".
-		    "-CRLfile $crl_fn ".
-		    "-inkey $ee_key ".
-		    "-in $fn_input -out $out");
+                    "-signer $ee_cert ".
+                    "-CRLfile $crl_fn ".
+                    "-inkey $ee_key ".
+                    "-in $fn_input -out $out");
 
 1;

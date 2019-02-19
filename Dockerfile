@@ -1,4 +1,4 @@
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 
 RUN apt-get update -y
 RUN apt-get install -y \
@@ -17,7 +17,8 @@ RUN apt-get install -y \
     make \
     wget \
     patch \
-    gcc
+    gcc \
+    rsync
 COPY cms.diff .
 RUN wget https://ftp.openssl.org/source/openssl-1.0.2p.tar.gz \
     && tar xf openssl-1.0.2p.tar.gz \
