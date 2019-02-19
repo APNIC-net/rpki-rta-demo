@@ -134,6 +134,46 @@ attestations (RTAs).  See
     # verify-rta --ca-cert-path ./trusted.pem --path content --in rta
     Verification succeeded.
 
+#### RTA signed using out-of-band objects
+
+To generate objects:
+
+    $ docker run -it apnic/rpki.net
+    # rpkic create_identity {name}
+    (Send {name}.identity.xml to parent RPKI engine, e.g.
+    rpki-testbed.apnic.net, and save response to response.xml.)
+    # rpkic -i {name} configure_parent response.xml
+    # rpkic configure_publication_client {name}.{parent-name}.repository-request.xml
+    # rpkic -i {name} configure_repository {name}.repository-response.xml
+    # issue-ee {name} test-ee {resources}
+
+After starting the RTA container:
+
+    $ export RPKI_CONTAINER={rpki.net-container}
+    $ export RTA_CONTAINER={rta-container}
+    $ docker cp $RPKI_CONTAINER:/test-ee.pem .
+    $ docker cp $RPKI_CONTAINER:/test-ee.pem.key .
+    $ docker cp $RPKI_CONTAINER:/test-ee.pem.crl .
+    $ docker cp test-ee.pem $RTA_CONTAINER:/
+    $ docker cp test-ee.pem.key $RTA_CONTAINER:/
+    $ docker cp test-ee.pem.crl $RTA_CONTAINER:/
+
+To sign an RTA object:
+
+    # echo "asdf" > content
+    # sign-rta-external \
+        --ee-cert test-ee.pem \
+        --ee-key test-ee.pem.key \
+        --crl test-ee.pem.crl \
+        --path content \
+        --resources {resources} \
+        --out rta
+
+To verify the RTA object:
+
+    # verify-rta --ca-cert-path ./trusted.pem --path content --in rta
+    Verification succeeded.
+
 ### Todo
 
    - Canonicalisation of signing input.
