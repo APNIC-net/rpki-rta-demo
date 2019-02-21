@@ -1,0 +1,285 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+use CGI;
+$CGI::POST_MAX = 1024 * 1024 * 10;
+use File::Temp;
+use File::Slurp qw(read_file);
+use List::Util qw(uniq);
+
+use APNIC::RPKI::CA;
+use APNIC::RPKI::RTA;
+use APNIC::RPKI::Validator;
+
+my $TEMPLATE = <<EOF;
+<html>
+<head>
+</head>
+<body>
+    <h2>RPKI RTA</h2>
+
+    <p style="color:green">
+        {success}
+    </p>
+    <p style="color:red">
+        {error}
+    </p>
+
+    <h3>Generate</h3>
+    <form method="POST" enctype="multipart/form-data">
+        <p>
+            <span>Resources</span>
+            <input type="text" name="resources" />
+        </p>
+        <p>
+            <span>File</span>
+            <input type="file" name="file" />
+        </p>
+        <p>
+            <input type="submit" name="submit" value="Generate" />
+        </p>
+    </form>
+
+    <h3>Validate</h3>
+    <form method="POST" enctype="multipart/form-data">
+        <p>
+            <span>File</span>
+            <input type="file" name="file" />
+        </p>
+        <p>
+            <span>RTA</span>
+            <input type="file" name="rta" />
+        </p>
+        <p>
+            <input type="submit" name="submit" value="Validate" />
+        </p>
+    </form>
+
+</body>
+EOF
+
+my $q = CGI->new();
+chdir "/rpki-rta";
+
+sub template
+{
+    my ($q, $success, $error) = @_;
+
+    my $template = $TEMPLATE;
+
+    if ($success) {
+        my $content = join '', map { "<span style='color:green'>$_</p>" } @{$success};
+        $template =~ s/{success}/$content/;
+    } else {
+        $template =~ s/{success}//;
+    }
+
+    if ($error) {
+        my $content = join '', map { "<span style='color:red'>$_</p>" } @{$error};
+        $template =~ s/{error}/$content/;
+    } else {
+        $template =~ s/{error}//;
+    }
+
+    print $q->header();
+    print $template;
+}
+
+sub get_parent_data
+{
+    my ($ca, $certs, $crls) = @_;
+
+    my $issuer = $ca->get_issuer();
+    if ($issuer eq $ca->get_subject()) {
+        return;
+    }
+
+    my $issuer_ca_path = "/rpki-rta/data/cas/".$issuer;
+    my $issuer_ca = APNIC::RPKI::CA->new(ca_path => $issuer_ca_path);
+
+    push @{$certs}, "-----BEGIN CERTIFICATE-----\n".
+                    $issuer_ca->get_ca_pem()."\n".
+                    "-----END CERTIFICATE-----";
+    push @{$crls}, $issuer_ca->get_crl();
+
+    get_parent_data($issuer_ca, $certs, $crls);
+}
+
+sub generate
+{
+    my ($q) = @_;
+
+    my %vars = $q->Vars();
+    my $resources = $vars{'resources'};
+    my $fh = $q->upload('file');
+    my $ft = File::Temp->new();
+    while (my $content = <$fh>) {
+        print $ft $content;
+    }
+    $ft->flush();
+    my $fn = $ft->filename();
+
+    # Create a new CA for this RTA.
+
+    my $ca;
+    my $name;
+    {
+        my @chars = ('A'..'Z');
+        do {
+            $name = join '', map { $chars[int(rand(@chars))] } (1..8);
+        } while (-e "/rpki-rta/data/cas/$name");
+        my $path = "/rpki-rta/data/cas/$name";
+        system("mkdir -p $path");
+        $ca = APNIC::RPKI::CA->new(ca_path => $path);
+        $ca->initialise($name);
+
+        my $resources = '10.0.0.0/8';
+        my @resource_parts = split /,/, $resources;
+        my @ip_resources = grep { /\./ or /:/ } @resource_parts;
+        my @as_resources = grep { not (/\./ or /:/) } @resource_parts;
+
+        my $request = $ca->get_ca_request($name, \@ip_resources, \@as_resources);
+        my $signing_ca =
+            APNIC::RPKI::CA->new(ca_path => "/rpki-rta/data/cas/ta");
+        my $response =
+            $signing_ca->sign_ca_request($request, \@ip_resources, \@as_resources);
+        $ca->install_ca_certificate($response);
+        $ca->issue_crl();
+    }
+
+    # Create the RTA.
+
+    $resources =~ s/\s*//g;
+    my @resource_parts = split /,/, $resources;
+    my @ipv4_resources = grep { /\./ } @resource_parts;
+    my @ipv6_resources = grep { /\:/ } @resource_parts;
+    my @as_resources = grep { not (/\./ or /:/) } @resource_parts;
+    my @ip_resources = (@ipv4_resources, @ipv6_resources);
+
+    $ca->issue_new_ee_certificate(\@ip_resources, \@as_resources);
+    $ca->issue_crl();
+
+    my @cas =
+	map { my $path = "/rpki-rta/data/cas/$_";
+	    APNIC::RPKI::CA->new(ca_path => $path) }
+	    ($name);
+
+    my @skis =
+	map { my $ee = $_->get_ee();
+	    $_->{'openssl'}->get_ski($ee) }
+	    @cas;
+    @skis = uniq @skis;
+
+    my $certs = [];
+    my $crls = [];
+    for my $ca (@cas) {
+	push @{$certs}, "-----BEGIN CERTIFICATE-----\n".
+			$ca->get_ca_pem()."\n".
+			"-----END CERTIFICATE-----";
+	get_parent_data($ca, $certs, $crls);
+    }
+    $certs = [ uniq @{$certs} ];
+    $crls = [ uniq @{$crls} ];
+
+    my $rta = APNIC::RPKI::RTA->new();
+    $rta->version(0);
+    $rta->subject_keys(\@skis);
+    $rta->ipv4(Net::CIDR::Set->new({type => 'ipv4'}, (join ',', @ipv4_resources)));
+    $rta->ipv6(Net::CIDR::Set->new({type => 'ipv6'}, (join ',', @ipv6_resources)));
+    $rta->asn(Set::IntSpan->new((join ',', @as_resources)));
+    $rta->path($fn);
+    $rta->algorithm('SHA256');
+
+    my $rta_asn1 = $rta->encode();
+    my $cms = $cas[0]->sign_cms_rta($rta_asn1, $certs, $crls);
+
+    print "Content-Type: application/pkcs7-mime\n";
+    print "Content-Length: ".(length $cms)."\n";
+    print "Content-Disposition: attachment; filename=rta.cms\n\n";
+
+    print $cms;
+
+    return;
+}
+
+sub validate
+{
+    my ($q) = @_;
+
+    my %vars = $q->Vars();
+    my $fh = $q->upload('file');
+    my $ft = File::Temp->new();
+    while (my $content = <$fh>) {
+        print $ft $content;
+    }
+    $ft->flush();
+    my $fn = $ft->filename();
+
+    my $rta_fh = $q->upload('rta');
+    my $rta_ft = File::Temp->new();
+    while (my $content = <$rta_fh>) {
+        print $rta_ft $content;
+    }
+    $rta_ft->flush();
+    my $rta_fn = $rta_ft->filename();
+
+    my $cwd = "/rpki-rta";
+    my $ca_names = ['ta'];
+    my @cas =
+	map { my $path = $cwd."/data/cas/$_";
+	    APNIC::RPKI::CA->new(ca_path => $path) }
+	    @{$ca_names || []};
+
+    my $certs = [];
+    for my $ca (@cas) {
+	if ($ca->get_issuer() ne $ca->get_subject()) {
+            die "CA is not a root CA";
+	}
+	push @{$certs}, "-----BEGIN CERTIFICATE-----\n".
+			$ca->get_ca_pem()."\n".
+			"-----END CERTIFICATE-----";
+    }
+    $certs = [ uniq @{$certs} ];
+
+    my $content = read_file($fn);
+    my $rta_data = read_file($rta_fn);
+
+    my $validator = APNIC::RPKI::Validator->new();
+    my $res = eval {  $validator->validate_rta($rta_data, $certs, $content); };
+    if (my $error = $@) {
+        template($q, [], ["Verification failed: $error"]);
+        return;
+    } else {
+        template($q, ['Verification succeeded.'], []);
+	return;
+    }
+}
+
+sub main
+{
+    my ($q) = @_;
+
+    my %vars = $q->Vars();
+    if (not keys %vars) {
+        template($q);
+        return;
+    }
+
+    if ($vars{'submit'} eq 'Generate') {
+        generate($q);
+        return;
+    }
+
+    if ($vars{'submit'} eq 'Validate') {
+        validate($q);
+        return;
+    }
+
+    template($q);
+}
+
+main($q);
+
+1;

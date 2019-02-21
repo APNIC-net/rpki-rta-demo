@@ -31,4 +31,3 @@ RUN cpanm Set::IntSpan Net::CIDR::Set
 COPY . /root/rpki-rta
 RUN cd /root/rpki-rta/ && perl Makefile.PL && make && make test && make install
 RUN rm -rf /root/rpki-rta/
-ENTRYPOINT /bin/bash

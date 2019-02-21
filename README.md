@@ -174,6 +174,15 @@ To verify the RTA object:
     # verify-rta --ca-cert-path ./trusted.pem --path content --in rta
     Verification succeeded.
 
+### Test UI
+
+    $ cd ui
+    $ docker build -t apnic/rpki-rta-ui .
+    $ docker run -p8080:80 -it apnic/rpki-rta-ui
+
+The UI will then be accessible at
+http://localhost:8080/cgi-bin/rpki-rta.
+
 ### Todo
 
    - Canonicalisation of signing input.
