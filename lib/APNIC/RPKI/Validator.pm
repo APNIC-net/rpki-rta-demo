@@ -32,8 +32,10 @@ sub validate_rta
     $ft->flush();
     my $fn = $ft->filename();
 
-    system("$openssl cms -inform DER -in $fn -verify -noverify -certsout /tmp/certs >/dev/null 2>&1");
-    my @lines = read_file("/tmp/certs");
+    my $certs_ft = File::Temp->new();
+    my $certs_fn = $certs_ft->filename();
+    system("$openssl cms -inform DER -in $fn -verify -noverify -certsout $certs_fn >/dev/null 2>&1");
+    my @lines = read_file($certs_fn);
     my @certs;
     my @current_cert_lines;
     for my $line (@lines) {
@@ -95,9 +97,11 @@ sub validate_rta
     if ($certs_only) {
         return;
     }
- 
-    system("$openssl cms -inform DER -in $fn -verify -noverify -crlsout /tmp/crls >/dev/null 2>&1");
-    @lines = read_file("/tmp/crls");
+
+    my $crls_ft = File::Temp->new();
+    my $crls_fn = $crls_ft->filename();
+    system("$openssl cms -inform DER -in $fn -verify -noverify -crlsout $crls_fn >/dev/null 2>&1");
+    @lines = read_file($crls_fn);
     my @crls;
     my @current_crl_lines;
     for my $line (@lines) {
