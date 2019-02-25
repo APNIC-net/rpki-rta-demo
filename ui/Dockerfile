@@ -4,7 +4,10 @@ RUN apt-get update -y
 RUN apt-get install -y \
     apache2 \
     libcgi-pm-perl \
-    vim
+    vim \
+    libio-capture-perl
 COPY start /start
+COPY apnic-logo.png /var/www/html/
+COPY favicon.ico /var/www/html/
 COPY rpki-rta /usr/lib/cgi-bin/
 CMD ["/start"]

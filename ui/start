@@ -4,4 +4,5 @@ cd /rpki-rta
 setup-ca --name ta --resources 10.0.0.0/8
 chown -R www-data:www-data /rpki-rta
 a2enmod cgi
-apachectl -D FOREGROUND
+apachectl start
+/bin/bash

@@ -137,19 +137,23 @@ sub validate_rta
 
     my $ft_output = File::Temp->new();
     my $fn_output = $ft_output->filename();
+    my $ft_error = File::Temp->new();
+    my $fn_error = $ft_error->filename();
 
-    my $debug = 0;
     eval { system_ad("$openssl cms -verify -crl_check_all -inform DER ".
               "-in $fn ".
               "-CAfile $fn_ta ".
               "-out $fn_output 2>&1",
-              $debug); };
+              0); };
     if (my $error = $@) {
-        system_ad("$openssl cms -verify -crl_check_all -inform DER ".
+        eval { system_ad("$openssl cms -verify -crl_check_all -inform DER ".
               "-in $fn ".
               "-CAfile $fn_ta ".
-              "-out $fn_output 2>&1",
-              1);
+              "-out $fn_output 2> $fn_error",
+              1); };
+        my $data = read_file($fn_error);
+        $data =~ s/\n/ /g;
+        die $data."\n";
     }
 
     my $rta_data = read_file($fn_output);
