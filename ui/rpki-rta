@@ -30,8 +30,7 @@ my $TEMPLATE = <<EOF;
    <div class="container">
        <div class="row">
            <div class="col-sm-12">
-               <span><img src='/apnic-logo.png' style="height: 4em" /><h2 style='display:inline;vertical-align:middle'>RPKI RTA Demo</h2></span>
-
+               <h2>RPKI RTA Demo</h2>
                <p>See <a href="https://tools.ietf.org/html/draft-michaelson-rpki-rta-00">https://tools.ietf.org/html/draft-michaelson-rpki-rta-00</a> for more details.</p>
            </div>
        </div>

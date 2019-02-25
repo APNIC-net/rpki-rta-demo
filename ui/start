@@ -1,8 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 mkdir /rpki-rta
 cd /rpki-rta
 setup-ca --name ta --resources 10.0.0.0/8,fc00::/7,64512-65535
 chown -R www-data:www-data /rpki-rta
 a2enmod cgi
 apachectl start
-/bin/bash
+for (( ; ; ))
+do
+    sleep 3600
+done
