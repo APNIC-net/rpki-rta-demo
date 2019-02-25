@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
-usewarnings;
-usestrict;
+use warnings;
+use strict;
 
 use CGI;
 $CGI::POST_MAX = 1024 * 1024 * 10;
@@ -355,7 +355,7 @@ sub verify
         my $rta_raw = read_file($fn);
 
         my $rta_parser = APNIC::RPKI::RTA->new();
-        rta_parser->decode($rta_raw);
+        $rta_parser->decode($rta_raw);
         my $ipv4 = $rta_parser->ipv4();
         my $ipv4_str = $ipv4 ? $ipv4->as_string() : "N/A";
         my $ipv6 = $rta_parser->ipv6();
