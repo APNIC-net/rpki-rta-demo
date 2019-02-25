@@ -183,11 +183,11 @@ sub validate_rta
         }
     }
 
-    if (($rta->asn() and not $rta->asn()->is_empty()) xor (not $as_set->empty())) {
+    if (($rta->asn() and not $rta->asn()->empty()) xor (not $as_set->empty())) {
         die "ASN resource mismatch.\n";
     }
     if ($rta->asn()) {
-        if (not $rta->asn()->equals($as_set)) {
+        if (not ($rta->asn() eq $as_set)) {
             die "ASN resource mismatch.\n";
         }
     }

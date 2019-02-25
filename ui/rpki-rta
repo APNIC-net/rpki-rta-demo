@@ -227,7 +227,7 @@ sub generate
        $ca = APNIC::RPKI::CA->new(ca_path => $path);
        $ca->initialise($name);
 
-       my $resources = '10.0.0.0/8';
+       my $resources = '10.0.0.0/8,fc00::/7,64512-65535';
        my @resource_parts = split /,/, $resources;
        my @ip_resources = grep { /\./ or /:/ } @resource_parts;
        my @as_resources = grep { not (/\./ or /:/) } @resource_parts;
