@@ -66,6 +66,9 @@ my ($ca_names, $in, $out) =
     @options{qw(ca-name in out)};
 
 my $cwd = cwd();
+if ($in !~ /^\//) {
+    $in = $cwd.'/'.$in;
+}
 if ($out !~ /^\//) {
     $out = $cwd.'/'.$out;
 }
@@ -86,11 +89,11 @@ for my $ca (@cas) {
 $certs = [ uniq @{$certs} ];
 $crls = [ uniq @{$crls} ];
 
-my $cms = read_file($cwd.'/'.$in);
+my $cms = read_file($in);
 $cms = $cas[0]->resign_cms_rta($cms, $certs, $crls);
 for (my $i = 1; $i < @cas; $i++) {
     $cms = $cas[$i]->resign_cms_rta($cms);
 }
-write_file($cwd.'/'.$out, $cms);
+write_file($out, $cms);
 
 1;
