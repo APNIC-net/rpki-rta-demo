@@ -145,6 +145,7 @@ To generate objects:
     # rpkic -i {name} configure_parent response.xml
     # rpkic configure_publication_client {name}.{parent-name}.repository-request.xml
     # rpkic -i {name} configure_repository {name}.repository-response.xml
+    # rpkic -i {name} force_run_now
     # issue-ee {name} test-ee {resources}
 
 After starting the RTA container:
