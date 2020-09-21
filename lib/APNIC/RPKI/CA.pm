@@ -28,7 +28,7 @@ dir                     = .
 [ req ]
 default_bits            = 2048
 encrypt_key             = yes
-default_md              = sha1
+default_md              = sha256
 utf8                    = yes
 string_mask             = utf8only
 prompt                  = no
@@ -43,6 +43,9 @@ keyUsage                = critical,keyCertSign,cRLSign
 basicConstraints        = critical,CA:true
 subjectKeyIdentifier    = hash
 
+[ pqs ]
+policyIdentifier        = 1.3.6.1.5.5.7.14.2
+
 [ ca ]
 default_ca              = root_ca
 
@@ -55,7 +58,7 @@ crlnumber               = {dir}/ca/{ca}/db/{ca}.crl.srl
 database                = {dir}/ca/{ca}/db/{ca}.db
 unique_subject          = no
 default_days            = 3652
-default_md              = sha1
+default_md              = sha256
 policy                  = match_pol
 email_in_dn             = no
 preserve                = no
@@ -84,12 +87,14 @@ keyUsage                = critical,keyCertSign,cRLSign
 basicConstraints        = critical,CA:true
 subjectKeyIdentifier    = hash
 authorityKeyIdentifier  = keyid:always
+certificatePolicies     = critical,\@pqs
 {root_ca_ext_extra}
 
 [ signing_ca_ext ]
 keyUsage                = critical,digitalSignature
 subjectKeyIdentifier    = hash
 authorityKeyIdentifier  = keyid:always
+certificatePolicies     = critical,\@pqs
 {signing_ca_ext_extra}
 
 [ crl_ext ]
