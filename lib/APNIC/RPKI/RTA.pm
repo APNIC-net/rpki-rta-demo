@@ -81,9 +81,10 @@ sub new
 
     my $parser = Convert::ASN1->new();
     $parser->configure(
-	encoding => "DER",
-	encode   => { time => "utctime" },
-	decode   => { time => "utctime" }
+	encoding   => "DER",
+	encode     => { time => "utctime" },
+	decode     => { time => "utctime" },
+	tagdefault => "EXPLICIT",
     );
     my $res = $parser->prepare(RTA_ASN1());
     if (not $res) {
