@@ -78,6 +78,46 @@ sub get_ski
     return $ski;
 }
 
+sub get_crldps
+{
+    my ($self, $cert) = @_;
+
+    my $ft_cert = File::Temp->new();
+    print $ft_cert $cert;
+    $ft_cert->flush();
+    my $fn_cert = $ft_cert->filename();
+
+    my $openssl = $self->get_openssl_path();
+    my @crls = `$openssl x509 -in $fn_cert -text -noout | grep -A10 'CRL Distribution Points' | grep '\\.crl'`;
+    my @final_crls;
+    for my $crl (@crls) {
+        $crl =~ s/\s*//g;
+        $crl =~ s/.*?://;
+        push @final_crls, $crl;
+    }
+    return \@crls;
+}
+
+sub get_aias
+{
+    my ($self, $cert) = @_;
+
+    my $ft_cert = File::Temp->new();
+    print $ft_cert $cert;
+    $ft_cert->flush();
+    my $fn_cert = $ft_cert->filename();
+
+    my $openssl = $self->get_openssl_path();
+    my @aias = `$openssl x509 -in $fn_cert -text -noout | grep 'CA Issuers.*rsync.*\\.cer'`;
+    my @final_aias;
+    for my $aia (@aias) {
+        $aia =~ s/\s*//g;
+        $aia =~ s/.*?://;
+        push @final_aias, $aia;
+    }
+    return \@aias;
+}
+
 sub get_resources
 {
     my ($self, $cert) = @_;

@@ -1,5 +1,5 @@
---- prev/cms.c	2018-08-14 19:48:56.000000000 +0700
-+++ apps/cms.c	2018-11-06 17:27:37.551626275 +0700
+--- prev/cms.c	2018-08-14 22:48:56.000000000 +1000
++++ apps/cms.c	2021-01-22 16:13:14.467425833 +1000
 @@ -70,6 +70,7 @@
  # undef PROG
  # define PROG cms_main
@@ -83,7 +83,27 @@
          for (i = 0; i < sk_OPENSSL_STRING_num(sksigners); i++) {
              CMS_SignerInfo *si;
              cms_key_param *kparam;
-@@ -1194,6 +1232,21 @@
+@@ -1071,6 +1109,19 @@
+                                        indata, out, flags))
+             goto end;
+     } else if (operation == SMIME_VERIFY) {
++	if (crlfile) {
++	    STACK_OF(X509_CRL) *crls = load_crls(
++		bio_err, crlfile, FORMAT_PEM, NULL,
++		e, "CRL file");
++	    if (!crls) {
++		exit(1);
++	    }
++	    for (int i = 0; i < sk_X509_CRL_num(crls); i++) {
++		X509_CRL *item = sk_X509_CRL_value(crls, i);
++		CMS_add1_crl(cms, item);
++	    }
++	}
++
+         if (CMS_verify(cms, other, store, indata, out, flags) > 0)
+             BIO_printf(bio_err, "Verification successful\n");
+         else {
+@@ -1194,6 +1245,21 @@
      BIO_free(tmp);
      return 1;
  }

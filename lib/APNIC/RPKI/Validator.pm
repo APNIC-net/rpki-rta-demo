@@ -123,17 +123,86 @@ sub validate_rta
         }
     }
 
+    my @certs_to_check = @certs;
+    my @extra_certs;
+    my @extra_crls;
+    while (@certs_to_check) {
+        my $cert = pop @certs_to_check;
+        my $aias = $self->{'openssl'}->get_aias($cert);
+        for my $aia (@{$aias}) {
+            my $ft = File::Temp->new();
+            my $fn = $ft->filename();
+            system_ad("rsync $aia $fn");
+            my $ft_pem = File::Temp->new();
+            my $fn_pem = $ft_pem->filename();
+            system_ad("$openssl x509 -inform DER -in $fn -outform PEM -out $fn_pem > /dev/null 2>&1");
+            my @lines = read_file("$fn_pem");
+            my $new_cert = join "", @lines;
+            push @extra_certs, $new_cert;
+            push @certs_to_check, $new_cert;
+        }
+        my $crldps = $self->{'openssl'}->get_crldps($cert);
+        for my $crldp (@{$crldps}) {
+            my $ft = File::Temp->new();
+            my $fn = $ft->filename();
+            system_ad("rsync $crldp $fn");
+            my $ft_pem = File::Temp->new();
+            my $fn_pem = $ft_pem->filename();
+            system_ad("$openssl crl -inform DER -in $fn -outform PEM -out $fn_pem > /dev/null 2>&1");
+            my @lines = read_file("$fn_pem");
+            my $new_crl = join "", @lines;
+            push @crls, $new_crl;
+            push @extra_crls, $new_crl;
+        }
+    }
+
     if (not @crls) {
         die "No CRLs found";
     }
 
-    my $ft_ta = File::Temp->new();
-    for my $entry (@{$ta}) {
-        print $ft_ta $entry;
-        print $ft_ta "\n";
+    # In principle, it should be possible to pass all the certificates
+    # got via AIA pointers to -certfile, and the TA to -CAfile, and
+    # have verify use the CAs from -certfile but only validate if
+    # there's a path to the TA.  In practice, -certfile appears not to
+    # be referred to for CA certificates in this way.  To work around
+    # this, confirm that there is a match for one of the TA's SKIs in
+    # the set of certificates that would be passed to -certfile (the
+    # AIAs should terminate at the TA).
+
+    my %ta_skis =
+        map { $self->{'openssl'}->get_ski($_) => 1 }
+            @{$ta};
+    my %cert_skis =
+        map { $self->{'openssl'}->get_ski($_) => 1 }
+            @extra_certs;
+    my $has_ta = 0;
+    for my $ta_ski (keys %ta_skis) {
+        if ($cert_skis{$ta_ski}) {
+            $has_ta = 1;
+            last;
+        }
     }
-    $ft_ta->flush();
-    my $fn_ta = $ft_ta->filename();
+    if (not $has_ta) {
+        die "No provided TA found in certificates got via AIAs.\n";
+    }
+
+    my $ft_certfile = File::Temp->new();
+    for my $entry (@extra_certs) {
+        chomp $entry;
+        print $ft_certfile $entry;
+        print $ft_certfile "\n";
+    }
+    $ft_certfile->flush();
+    my $fn_certfile = $ft_certfile->filename();
+
+    my $ft_crlfile = File::Temp->new();
+    for my $entry (@extra_crls) {
+        chomp $entry;
+        print $ft_crlfile $entry;
+        print $ft_crlfile "\n";
+    }
+    $ft_crlfile->flush();
+    my $fn_crlfile = $ft_crlfile->filename();
 
     my $ft_output = File::Temp->new();
     my $fn_output = $ft_output->filename();
@@ -142,13 +211,15 @@ sub validate_rta
 
     eval { system_ad("$openssl cms -verify -crl_check_all -inform DER ".
               "-in $fn ".
-              "-CAfile $fn_ta ".
+              "-CAfile $fn_certfile ".
+              "-CRLfile $fn_crlfile ".
               "-out $fn_output 2>&1",
               0); };
     if (my $error = $@) {
         eval { system_ad("$openssl cms -verify -crl_check_all -inform DER ".
               "-in $fn ".
-              "-CAfile $fn_ta ".
+              "-CAfile $fn_certfile ".
+              "-CRLfile $fn_crlfile ".
               "-out $fn_output 2> $fn_error",
               1); };
         my $data = read_file($fn_error);
