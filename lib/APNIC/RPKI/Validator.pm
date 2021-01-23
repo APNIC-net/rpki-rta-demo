@@ -165,32 +165,42 @@ sub validate_rta
     # have verify use the CAs from -certfile but only validate if
     # there's a path to the TA.  In practice, -certfile appears not to
     # be referred to for CA certificates in this way.  To work around
-    # this, confirm that there is a match for one of the TA's SKIs in
-    # the set of certificates that would be passed to -certfile (the
-    # AIAs should terminate at the TA).
+    # this, if certificates are going to be passed in via -certfile,
+    # then confirm that one of them has a SKI matching one of the TA's
+    # SKIs (the AIAs should terminate at the TA).
 
-    my %ta_skis =
-        map { $self->{'openssl'}->get_ski($_) => 1 }
-            @{$ta};
-    my %cert_skis =
-        map { $self->{'openssl'}->get_ski($_) => 1 }
-            @extra_certs;
-    my $has_ta = 0;
-    for my $ta_ski (keys %ta_skis) {
-        if ($cert_skis{$ta_ski}) {
-            $has_ta = 1;
-            last;
+    if (@extra_certs) {
+        my %ta_skis =
+            map { $self->{'openssl'}->get_ski($_) => 1 }
+                @{$ta};
+        my %cert_skis =
+            map { $self->{'openssl'}->get_ski($_) => 1 }
+                @extra_certs;
+        my $has_ta = 0;
+        for my $ta_ski (keys %ta_skis) {
+            if ($cert_skis{$ta_ski}) {
+                $has_ta = 1;
+                last;
+            }
         }
-    }
-    if (not $has_ta) {
-        die "No provided TA found in certificates got via AIAs.\n";
+        if (not $has_ta) {
+            die "No provided TA found in certificates got via AIAs.\n";
+        }
     }
 
     my $ft_certfile = File::Temp->new();
-    for my $entry (@extra_certs) {
-        chomp $entry;
-        print $ft_certfile $entry;
-        print $ft_certfile "\n";
+    if (@extra_certs) {
+        for my $entry (@extra_certs) {
+            chomp $entry;
+            print $ft_certfile $entry;
+            print $ft_certfile "\n";
+        }
+    } else {
+        for my $entry (@{$ta}) {
+            chomp $entry;
+            print $ft_certfile $entry;
+            print $ft_certfile "\n";
+        }
     }
     $ft_certfile->flush();
     my $fn_certfile = $ft_certfile->filename();
@@ -212,14 +222,14 @@ sub validate_rta
     eval { system_ad("$openssl cms -verify -crl_check_all -inform DER ".
               "-in $fn ".
               "-CAfile $fn_certfile ".
-              "-CRLfile $fn_crlfile ".
+              (@extra_crls ? "-CRLfile $fn_crlfile " : '').
               "-out $fn_output 2>&1",
               0); };
     if (my $error = $@) {
         eval { system_ad("$openssl cms -verify -crl_check_all -inform DER ".
               "-in $fn ".
               "-CAfile $fn_certfile ".
-              "-CRLfile $fn_crlfile ".
+              (@extra_crls ? "-CRLfile $fn_crlfile " : '').
               "-out $fn_output 2> $fn_error",
               1); };
         my $data = read_file($fn_error);
