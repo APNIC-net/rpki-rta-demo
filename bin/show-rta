@@ -35,8 +35,6 @@ if (not $options{'in'}) {
 
 my ($in) = @options{qw(in)};
 
-my $cwd = cwd();
-
 my $cms = read_file($in);
 my $openssl = APNIC::RPKI::OpenSSL->new()->{'path'};
 my $ft = File::Temp->new();

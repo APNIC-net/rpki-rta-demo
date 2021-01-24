@@ -73,8 +73,14 @@ for my $ca_cert_path (@{$ca_cert_paths || []}) {
 }
 $certs = [ uniq @{$certs} ];
 
-my $content = read_file($cwd.'/'.$path);
-my $rta_data = read_file($cwd.'/'.$in);
+if ($path !~ /^\//) {
+    $path = $cwd.'/'.$path;
+}
+if ($in !~ /^\//) {
+    $in = $cwd.'/'.$in;
+}
+my $content = read_file($path);
+my $rta_data = read_file($in);
 
 my $validator = APNIC::RPKI::Validator->new();
 my $res = eval {  $validator->validate_rta($rta_data, $certs, $content); };

@@ -80,6 +80,9 @@ my $cwd = cwd();
 if ($out !~ /^\//) {
     $out = $cwd.'/'.$out;
 }
+if ($path !~ /^\//) {
+    $path = $cwd.'/'.$path;
+}
 
 my @cas =
     map { my $path = $cwd."/data/cas/$_";
@@ -115,7 +118,7 @@ $rta->subject_keys(\@skis);
 $rta->ipv4(Net::CIDR::Set->new({type => 'ipv4'}, (join ',', @ipv4_resources)));
 $rta->ipv6(Net::CIDR::Set->new({type => 'ipv6'}, (join ',', @ipv6_resources)));
 $rta->asn(Set::IntSpan->new((join ',', @as_resources)));
-$rta->path($cwd.'/'.$path);
+$rta->path($path);
 $rta->algorithm('SHA256');
 
 my $rta_asn1 = $rta->encode();
