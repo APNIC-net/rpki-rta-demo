@@ -25,6 +25,9 @@ $0 --ee-cert {EE certificate path}
     --resources {IPv4/IPv6/ASN resources}
     --subject-key {subject-key}
     --out {path}
+    --resign
+    --in {path}
+    --no-extra-objects
 
 Sign an RTA object using externally-sourced certificates and keys.
 The path to the data to be signed is provided as an argument to the
@@ -35,6 +38,13 @@ CRLs, if they can be retrieved).  If additional subject keys need to
 be added to the RTA, they should be provided as arguments to the
 --subject-key option in hexadecimal format.  All certificate, key, and
 CRL arguments must be in PEM format.
+
+If --resign is provided, then --in must be an existing signed RTA
+object.
+
+If --no-extra-objects is provided, then no CRLs or CA certificates
+will be included in the signed data (this option needs to be used when
+validating with Routinator).
 EOF
 
     exit(10);
@@ -79,7 +89,8 @@ sub load_crls
 my %options;
 GetOptions(\%options,
     'ee-cert=s', 'ee-key=s', 'ca-cert=s@', 'crl=s@',
-    'resources=s', 'path=s', 'out=s', 'subject-key=s@');
+    'resources=s', 'path=s', 'out=s', 'subject-key=s@',
+    'resign', 'in=s', '--no-extra-objects');
 if (not $options{'ee-cert'}) {
     print "Please enter an EE certificate path.\n";
     usage();
@@ -88,18 +99,16 @@ if (not $options{'ee-key'}) {
     print "Please enter an EE key path.\n";
     usage();
 }
-if (not $options{'crl'}) {
-    print "Please enter a CRL path.\n";
-    usage();
-}
 
-if (not $options{'path'}) {
-    print "Please enter a path.\n";
-    usage();
-}
-if (not $options{'resources'}) {
-    print "Please enter resource details.\n";
-    usage();
+if (not $options{'resign'}) {
+    if (not $options{'path'}) {
+        print "Please enter a path.\n";
+        usage();
+    }
+    if (not $options{'resources'}) {
+        print "Please enter resource details.\n";
+        usage();
+    }
 }
 if (not $options{'out'}) {
     print "Please enter an output path.\n";
@@ -107,17 +116,19 @@ if (not $options{'out'}) {
 }
 
 my ($ee_cert, $ee_key, $ca_certs, $crls,
-    $path, $resources, $out, $arg_skis) =
+    $path, $resources, $out, $arg_skis, $resign,
+    $resign_in, $no_extra_objects) =
     @options{qw(ee-cert ee-key ca-cert crl
-                path resources out subject-key)};
+                path resources out subject-key
+                resign in no-extra-objects)};
 $ca_certs ||= [];
 
 my $cwd = cwd();
 if ($out !~ /^\//) {
     $out = $cwd.'/'.$out;
 }
-if ($path !~ /^\//) {
-    $path = $cwd.'/'.$path;
+if ($resign_in !~ /^\//) {
+    $resign_in = $cwd.'/'.$resign_in;
 }
 
 my $openssl = APNIC::RPKI::OpenSSL->new();
@@ -157,28 +168,37 @@ my @ipv4_resources = grep { /\./ } @resource_parts;
 my @ipv6_resources = grep { /\:/ } @resource_parts;
 my @as_resources = grep { not (/\./ or /:/) } @resource_parts;
 
-my $rta = APNIC::RPKI::RTA->new();
-$rta->version(0);
-$rta->subject_keys(\@skis);
-$rta->ipv4(Net::CIDR::Set->new({type => 'ipv4'}, (join ',', @ipv4_resources)));
-$rta->ipv6(Net::CIDR::Set->new({type => 'ipv6'}, (join ',', @ipv6_resources)));
-$rta->asn(Set::IntSpan->new((join ',', @as_resources)));
-$rta->path($path);
-$rta->algorithm('SHA256');
-
-my $rta_asn1 = $rta->encode();
 my $input = File::Temp->new();
-print $input $rta_asn1;
-$input->flush();
-my $fn_input = $input->filename();
+my $fn_input;
+if (not $resign) {
+    my $rta = APNIC::RPKI::RTA->new();
+    $rta->version(0);
+    $rta->subject_keys(\@skis);
+    $rta->ipv4(Net::CIDR::Set->new({type => 'ipv4'}, (join ',', @ipv4_resources)));
+    $rta->ipv6(Net::CIDR::Set->new({type => 'ipv6'}, (join ',', @ipv6_resources)));
+    $rta->asn(Set::IntSpan->new((join ',', @as_resources)));
+    $rta->path($cwd.'/'.$path);
+    $rta->algorithm('SHA256');
 
-my $res = system("$openssl_path cms -sign -nodetach -binary -outform DER ".
-                    " $other_certs_content -nosmimecap ".
-                    "-keyid -md sha256 -econtent_type ".
-                    APNIC::RPKI::CA::ID_CT_RTA()." ".
-                    "-signer $ee_cert ".
-                    "-CRLfile $crl_fn ".
-                    "-inkey $ee_key ".
-                    "-in $fn_input -out $out");
+    my $rta_asn1 = $rta->encode();
+    print $input $rta_asn1;
+    $input->flush();
+    $fn_input = $input->filename();
+} else {
+    $fn_input = $resign_in;
+}
+
+my $res = system(
+    "$openssl_path cms ".
+    ($resign ? " -resign -inform DER " : " -sign -nodetach -binary ").
+    "-outform DER ".
+    ($no_extra_objects ? "" : "$other_certs_content -CRLfile $crl_fn ").
+    "-nosmimecap ".
+    "-keyid -md sha256 -econtent_type ".APNIC::RPKI::CA::ID_CT_RTA()." ".
+    "-signer $ee_cert ".
+    "-inkey $ee_key ".
+    "-in $fn_input ".
+    "-out $out"
+);
 
 1;
