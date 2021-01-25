@@ -127,7 +127,7 @@ my $cwd = cwd();
 if ($out !~ /^\//) {
     $out = $cwd.'/'.$out;
 }
-if ($resign_in !~ /^\//) {
+if ($resign_in and ($resign_in !~ /^\//)) {
     $resign_in = $cwd.'/'.$resign_in;
 }
 
