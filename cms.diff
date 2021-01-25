@@ -128,8 +128,8 @@ diff -Naur openssl-1.0.2p-prev/apps/cms.c openssl-1.0.2p/apps/cms.c
  
 diff -Naur openssl-1.0.2p-prev/crypto/cms/cms_sd.c openssl-1.0.2p/crypto/cms/cms_sd.c
 --- openssl-1.0.2p-prev/crypto/cms/cms_sd.c	2021-01-25 14:46:12.230081141 +1000
-+++ openssl-1.0.2p/crypto/cms/cms_sd.c	2021-01-25 14:51:18.436678759 +1000
-@@ -688,6 +688,18 @@
++++ openssl-1.0.2p/crypto/cms/cms_sd.c	2021-01-25 15:27:50.454556925 +1000
+@@ -688,6 +688,20 @@
              goto err;
      }
  
@@ -138,11 +138,13 @@ diff -Naur openssl-1.0.2p-prev/crypto/cms/cms_sd.c openssl-1.0.2p/crypto/cms/cms
 +     * only sets it on the first one (additional signed structures
 +     * have no explicit content type), which is why this workaround is
 +     * here. */
-+    const char *ct = "1.2.840.113549.1.9.16.1.36";
-+    ASN1_OBJECT *econtent_type = OBJ_txt2obj(ct, 0);
-+    if (CMS_signed_add1_attr_by_NID(si, NID_pkcs9_contentType,
-+                                    V_ASN1_OBJECT, econtent_type, -1) <= 0) {
-+        goto err;
++    if (CMS_signed_get_attr_by_NID(si, NID_pkcs9_contentType, -1) < 0) {
++        const char *ct = "1.2.840.113549.1.9.16.1.36";
++        ASN1_OBJECT *econtent_type = OBJ_txt2obj(ct, 0);
++        if (CMS_signed_add1_attr_by_NID(si, NID_pkcs9_contentType,
++                                        V_ASN1_OBJECT, econtent_type, -1) <= 0) {
++            goto err;
++        }
 +    }
 +
      if (si->pctx)
