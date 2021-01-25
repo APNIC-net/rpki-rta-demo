@@ -23,7 +23,7 @@ COPY cms.diff .
 RUN wget https://ftp.openssl.org/source/openssl-1.0.2p.tar.gz \
     && tar xf openssl-1.0.2p.tar.gz \
     && cd openssl-1.0.2p \
-    && patch -p0 < /cms.diff \
+    && patch -p1 < /cms.diff \
     && ./config enable-rfc3779 \
     && make \
     && make install

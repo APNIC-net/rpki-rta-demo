@@ -1,5 +1,6 @@
---- prev/cms.c	2018-08-14 22:48:56.000000000 +1000
-+++ apps/cms.c	2021-01-22 16:13:14.467425833 +1000
+diff -Naur openssl-1.0.2p-prev/apps/cms.c openssl-1.0.2p/apps/cms.c
+--- openssl-1.0.2p-prev/apps/cms.c	2021-01-25 14:46:12.194081306 +1000
++++ openssl-1.0.2p/apps/cms.c	2021-01-25 14:46:52.173898198 +1000
 @@ -70,6 +70,7 @@
  # undef PROG
  # define PROG cms_main
@@ -125,3 +126,25 @@
  
  /* Minimal callback just to output policy info (if any) */
  
+diff -Naur openssl-1.0.2p-prev/crypto/cms/cms_sd.c openssl-1.0.2p/crypto/cms/cms_sd.c
+--- openssl-1.0.2p-prev/crypto/cms/cms_sd.c	2021-01-25 14:46:12.230081141 +1000
++++ openssl-1.0.2p/crypto/cms/cms_sd.c	2021-01-25 14:51:18.436678759 +1000
+@@ -688,6 +688,18 @@
+             goto err;
+     }
+ 
++    /* This is the content type for RTAs.  Krill requires that this
++     * content type be set on each signed structure, whereas OpenSSL
++     * only sets it on the first one (additional signed structures
++     * have no explicit content type), which is why this workaround is
++     * here. */
++    const char *ct = "1.2.840.113549.1.9.16.1.36";
++    ASN1_OBJECT *econtent_type = OBJ_txt2obj(ct, 0);
++    if (CMS_signed_add1_attr_by_NID(si, NID_pkcs9_contentType,
++                                    V_ASN1_OBJECT, econtent_type, -1) <= 0) {
++        goto err;
++    }
++
+     if (si->pctx)
+         pctx = si->pctx;
+     else {
