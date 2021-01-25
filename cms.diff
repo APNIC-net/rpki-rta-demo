@@ -87,18 +87,18 @@
                                         indata, out, flags))
              goto end;
      } else if (operation == SMIME_VERIFY) {
-+	if (crlfile) {
-+	    STACK_OF(X509_CRL) *crls = load_crls(
-+		bio_err, crlfile, FORMAT_PEM, NULL,
-+		e, "CRL file");
-+	    if (!crls) {
-+		exit(1);
-+	    }
-+	    for (int i = 0; i < sk_X509_CRL_num(crls); i++) {
-+		X509_CRL *item = sk_X509_CRL_value(crls, i);
-+		CMS_add1_crl(cms, item);
-+	    }
-+	}
++        if (crlfile) {
++            STACK_OF(X509_CRL) *crls = load_crls(
++                bio_err, crlfile, FORMAT_PEM, NULL,
++                e, "CRL file");
++            if (!crls) {
++                exit(1);
++            }
++            for (int i = 0; i < sk_X509_CRL_num(crls); i++) {
++                X509_CRL *item = sk_X509_CRL_value(crls, i);
++                CMS_add1_crl(cms, item);
++            }
++        }
 +
          if (CMS_verify(cms, other, store, indata, out, flags) > 0)
              BIO_printf(bio_err, "Verification successful\n");
